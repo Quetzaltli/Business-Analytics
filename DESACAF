@@ -1,0 +1,322 @@
+---
+title: "DESACAF"
+author: "quetzalli"
+date: "13/11/2019"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+library(tidytext)
+library(tidyverse)
+library(rvest)
+##library(quanteda)
+library(knitr)
+library(dplyr)
+library(tidyr)
+library(readr)
+library(purrr)
+library(tibble)
+library(tidyquant)
+library(janeaustenr)
+library(readr)
+library(knitr)
+library(wordcloud)
+library(tm)
+library(widyr)
+library(sf)
+library(tmap)
+library(leaflet)
+library(mapview)
+library(foreign)
+library(RCurl)
+```
+
+```{r}
+library(lubridate)
+library(forecast)
+```
+
+
+```{r}
+
+Ventas1<- dataset%>%
+  group_by(Pedido, `Fecha Pedido`)%>%
+  filter(Comprador!=" ")%>%
+  filter(`Sub-Total`!= "")%>%
+  filter(`ID Pedido`!= "")%>%
+  filter(`ID Pedido`== "RHBERC")%>%
+  mutate(`Total Pedido`=sum(`Sub-Total`))%>%
+  mutate(Semana=week(`Fecha Pedido`))%>%
+  mutate(Ano=year(`Fecha Pedido`))%>%
+  ungroup()%>%
+  group_by(Pedido, Semana, Ano)%>%
+  summarise(TotalCa=sum(Cantidad))%>%
+  ungroup()%>%
+  select(Semana, TotalCa, Ano)%>%
+  arrange(Ano)
+
+
+
+#ggplot(Ventas1, aes(x=Ventas1$`Semana`, y=Ventas1$`ID Pedido`, fill=Ventas1$TotalCa))+
+#  geom_tile() + xlab("Semana 2019") + ylab("Producto") + ggtitle("Patrones de Compra por Producto")+ theme(title = element_text(color = "black")) + scale_fill_gradient2(high = "black", mid = "#7ed957", name="Unidades de Compra")+
+ #theme(axis.text.x = element_text(angle = 90,size = 6 , hjust = 0))+ theme(axis.text.y = element_text(size = 7 , hjust = .5)) + theme(panel.grid.major = element_line(colour = "gray"))+ scale_x_continuous(breaks=seq(0,52,4))
+
+  
+
+```
+
+
+
+
+```{r}
+library(lubridate)
+
+Ventasss<- ts(Ventas1$TotalCa, freq=52, start=c(2019, 1), end=c(2020, 2))
+              #start=decimal_date(ymd("2019-01-02")))
+#, end = decimal_date(ymd("2019-12-12")))
+              
+              #end=decimal_date(ymd("2019-12-12")))
+
+plot(Ventasss, main= "Proyección semanal de RHBJSM a seis meses", color= "#eec94d")
+
+
+```
+
+
+```{r}
+descomp1=decompose(Ventasss)
+str(descomp1)
+plot(descomp1)
+```
+
+```{r}
+modelo<- auto.arima(Ventasss)
+summary(modelo)
+
+
+```
+
+```{r}
+plot(forecast(modelo,24,level = 95),  main= "Incremento de RHBJSM durante las próximas 24 semanas")
+
+RHBJSM<- forecast(modelo,24,level = 95)
+write.csv(RHBJSM, "RHBJSM.csv")
+
+```
+
+
+```{r}
+
+Compventas<- Ventas%>%
+  group_by(Comprador, `Fecha Pedido`)%>%
+  filter(Comprador!=" ")%>%
+  filter(`ID Pedido`!=" ")%>%
+  filter(`Sub-Total`!= "")%>%
+  mutate(`Total Pedido`=sum(`Sub-Total`))%>%
+  mutate(Semana=week(`Fecha Pedido`))%>%
+  ungroup()%>%
+  mutate(as_factor(Comprador))%>%
+  mutate(as_factor(`ID Pedido`))%>%
+  group_by(Comprador)%>%
+  mutate(TotalC=sum(`Sub-Total`))%>%
+  arrange(-TotalC)
+  
+library(treemap)  
+
+
+treemap(Compventas,title.legend ="Composición de las Ventas",
+            index=c("ID Pedido","Comprador"),
+            vSize= "Sub-Total",
+            type="index",
+            bg.labels=c("white"),
+            align.labels=list(
+              c("center", "center"), 
+              c("left", "top")))
+
+```
+
+
+
+
+
+```{r}
+file <- "gadm36_MEX_shp/gadm36_MEX_1.shp"
+
+mapa <- st_read(file, quiet=TRUE)
+
+mpad<- Ventas%>%
+  group_by(NAME_1, X1)%>%
+  filter(NAME_1!="")%>%
+  filter(`Sub-Total`!= "")%>%
+  filter(NAME_1!="#N/A")%>%
+  summarise(`Ventas Anuales`=sum(`Sub-Total`))
+
+join <- left_join(mapa, mpad)
+
+##ggplot(join) + geom_sf(aes(fill=`Ventas Anuales`))
+
+
+
+
+  ggplot(join)+
+ geom_sf(aes(fill=`Ventas Anuales`)) + geom_sf_text(aes(label=NAME_1), size=2, check_overlap = TRUE) +coord_sf(datum=NA)+ theme(line = element_blank(), axis.text =element_blank(), axis.title= element_blank(), panel.background= element_blank()) +   scale_fill_gradient2(breaks=seq(0,1300000,150000), mid ="#a6e889", high = "#0d3401")
+  
+  ggsave("Mapa.jpg")
+
+```
+
+
+
+
+```{r}
+library(survey)
+options(survey.lonely.psu="remove")
+ERC<- dataset%>%
+  mutate(ENRC=ifelse(a605c==1,1,0))%>%
+  select(est_var, code_upm, ponde_f, pondefmiles, rural, entidad, folio, desc_ent, ENRC, a605c, pondefmiles)%>%
+  write.csv("ERC1.csv")
+
+
+```
+
+```{r}
+ERC2<- ERC1%>%
+  filter(ENRC!="")%>%
+  filter(est_var!="")%>%
+  group_by(entidad,code_upm,est_var)%>%
+  summarise(Factor=mean(ponde_f),
+         Factors=mean(pondefmiles),
+         ENRC=mean(ENRC))
+
+  write.csv("ERC2.csv")
+```
+
+```{r}
+design2<-svydesign(data=ERC2,id=~ERC2$code_upm,
+                   strata=~ERC2$
+                     .ar,nest=TRUE,weights=~ERC2$Factor)
+
+
+summary(design2)
+```
+
+
+
+
+```{r}
+
+ENRCmc<- svyby(~ENRC, ~entidad,design=design2 , svymean)
+
+ENRCmc1<- svymean(~ENRC,design=design2)
+```
+```{r}
+ENRCmc
+
+write.csv(ENRCmc,"TASAS.csv")
+```
+```{r}
+
+file <- "gadm36_MEX_shp/gadm36_MEX_1.shp"
+
+mapa <- st_read(file, quiet=TRUE)
+
+
+join1 <- left_join(mapa, Mapita)
+
+##ggplot(join) + geom_sf(aes(fill=`Ventas Anuales`))
+
+
+
+
+  ggplot(join1)+
+ geom_sf(aes(fill=`ENFERMOS RENALES`)) + geom_sf_text(aes(label=NAME_1), size=2, check_overlap = TRUE) +coord_sf(datum=NA)+ theme(line = element_blank(), axis.text =element_blank(), axis.title= element_blank(), panel.background= element_blank()) + scale_fill_viridis_c(breaks=seq(0,500000,50000))
+  ##+ scale_fill_gradient2(breaks=seq(0,500000,50000), low="white", mid ="green", high = "red")
+  
+  ggsave("Mapa1.jpg")
+
+
+
+
+```
+
+```{r}
+library(rvest) #Scrap
+library(tidytext) #Text mining
+library(httr) #Peticiones
+library(tidyverse) 
+library(stringr)
+library(tm)
+
+
+total_links <-NULL
+link <-  NULL
+
+for (i in 1:39) {
+  
+  cat(i, "...")
+  
+  url <- paste0("https://www.doctoralia.com.mx/clinicas/nefrologia/",i,"/")
+  
+  pr <- read_html(url)
+  
+  link <- pr %>% 
+    html_nodes('.padding-left-2')%>%
+    html_text()%>%
+     #       html_attr('href') %>% 
+    as_tibble()
+  
+ total_links <- rbind(total_links, link)
+  
+}
+
+write.csv(total_links, "links_transcripciones.csv")
+
+```
+```{r}
+colnames(base)  <- c("DOCTORES","DIRECCIONES")
+
+write.csv(base, "basenefro.csv")
+```
+
+
+
+```{r}
+bassdesacaf<- base%>%
+  mutate(DOCTORES = str_trim(DOCTORES, side="both"))%>%
+  mutate(DIRECCIONES = gsub("Consultorio privado", "", DIRECCIONES))%>%
+  mutate(DIRECCIONES = gsub("CONSULTORIO PRIVADO", "", DIRECCIONES))%>%
+  mutate(DOCTORES= gsub("Dr.", "", DOCTORES))%>%
+  mutate(DOCTORES= gsub("\\.", "", DOCTORES))%>%
+  mutate(DOCTORES= str_trim(DOCTORES, side="both"))%>%
+  mutate(DOCTORES= gsub("\\s","-", DOCTORES ))%>%
+  mutate(DOCTORES=lapply(DOCTORES, tolower))%>%
+  mutate(DOCTORES= gsub("á","a", DOCTORES))%>%
+  mutate(DOCTORES= gsub("é","e", DOCTORES))%>%
+  mutate(DOCTORES= gsub("í","i", DOCTORES))%>%
+  mutate(DOCTORES= gsub("ó","o", DOCTORES))%>%
+  mutate(DOCTORES= gsub("ú","u", DOCTORES))%>%
+  mutate(DOCTORES= gsub("ñ","n", DOCTORES))
+  
+list <- c()
+for(i in 1:nrow(bassdesacaf)){
+  list <- append(list, bassdesacaf$DOCTORES)
+}
+
+
+
+```
+
+
+```{r}
+
+```
+
+
+
+
+```{r}
+
+
+write.csv2(bassdesacaf, "bassdesacaf.csv")
+
+```
