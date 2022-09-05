@@ -1,0 +1,88 @@
+
+```{r}
+winso <- function(data) {
+
+ ifelse (data > quantile(data, .99), quantile(data,.99), data) }
+
+winsoc <- function(data) {
+
+ ifelse (data > quantile(data, .98), quantile(data,.98), data) }
+
+```
+
+```{r setup, include=FALSE}
+library(readr)
+full2018 <- read_csv("external_2018_full.csv")
+external_2018 <- read_csv("external_2018.csv")
+external_2021 <- read_csv("external_2021.csv")
+full <- external_2018%>%
+  rename(lga_end="lga_base")%>%
+  rbind(external_2021)
+
+```
+
+
+```{r}
+graph=full%>%
+select("spei_12m_mean", "spei_12m_min", "spei_12m_max",  "chirps_12m_mean", "chirps_12m_z", "chirps_12m_base_rainy",  "chirps_12m_mean_rainy",  "chirps_12m_anom_rainy", "chirps_12m_anom_aug", "chirps_12m_anom_jan",   "modis_12m_mean",        "modis_12m_base_rainy", 
+"modis_12m_mean_rainy",  "modis_12m_anom_rainy",  "modis_12m_anom_aug",   
+"modis_12m_anom_jan",    "gmted",                 "grip",                 
+"gaez_mze",              "gaez_csv",              "lga_exposure_3m",     
+"lga_exposure_6m",       "lga_exposure_12m",      "lga_exposure_60m",     
+"conflict_60m_d5",       "conflict_60m_d25",      "conflict_60m_d50",     
+"conflict_60m_d25_full", "conflict_60m_d50_full", "conflict_12m_d5",      
+"conflict_12m_d25",      "conflict_12m_d50",      "conflict_12m_d25_full",
+"conflict_12m_d50_full", "conflict_6m_d5",        "conflict_6m_d25",      
+"conflict_6m_d50",       "conflict_6m_d25_full",  "conflict_6m_d50_full", "conflict_3m_d5",      "conflict_3m_d25",       "conflict_3m_d50" ,     
+"conflict_3m_d25_full",  "conflict_3m_d50_full",  "dist_capital_km")%>%
+mutate(across(starts_with("conflict"), winso))%>%
+  mutate(gmted=winso(gmted))%>%
+  mutate(dist_capital_km=winsoc(dist_capital_km))
+```
+
+```{r}
+variables<-names(graph)
+
+for (var in variables) {
+  # print(var)
+   p<-ggplot(graph, aes(x = !!sym(var))) + geom_density() +
+  geom_vline(aes(xintercept = mean(!!sym(var))), 
+             linetype = "dashed", size = 0.6) + ylab("")
+   name=paste(var, "jpg", sep = ".")
+   ggsave(name)
+   print(p)
+}
+```
+
+```{r}
+Z <- function(x, na.rm = FALSE) (x - mean(x)) / sd(x, na.rm)
+
+
+nam=names(graph)
+
+exp=graph%>%
+  mutate(across(nam, Z))
+
+Zvariables<-names(exp)
+
+for (var in Zvariables) {
+  # print(var)
+   p<-ggplot(exp, aes(x = !!sym(var))) + geom_density() +
+  geom_vline(aes(xintercept = mean(!!sym(var))), 
+             linetype = "dashed", size = 0.6) + ylab("")
+   name=paste(var, "Z", "jpg", sep = ".")
+   ggsave(name)
+   print(p)
+}
+```
+
+```{r}
+contextual= exp%>%
+  gather(Contextual_factors, Value, gmted, grip, gaez_mze, gaez_csv, dist_capital_km)
+
+ggplot(contextual, aes(x=Value, y=Contextual_factors, fill=..x..)) +
+  geom_density_ridges_gradient(gradient_lwd = 0.5, fill="#ff864e") +
+  geom_vline(xintercept = 0, linetype="dotted") + ggtitle("Contextual factors") +ylab("")
+
+ggsave("Contextual.jpg")
+```
